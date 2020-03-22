@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import connection from '../connection';
+import { IResult, IRecordSet } from 'mssql';
 
 interface Task {
   id: number;
@@ -9,31 +10,24 @@ interface Task {
 }
 
 const router = Router();
-router.get('/tree', function (req, res) {
-  const sql = `
-  select 
-	  TaskName as name,
-	  ID as id,
-	  ParentTaskID as parentId
-  from 
-    Tasks
-`;
-  connection.query(sql)
-    .then(r => {
-      const planarTree = r.recordset as Task[];
-      // planarTree
 
-      res.send(generateTree(planarTree));
-      // res.send();
-    })
-    .catch(() => res.sendStatus(500));
+router.get('/tree', async function (req, res) {
+  try {
+    const planarTree = (await connection.query(`
+    select TaskName as name, id, ParentTaskID as parentId
+    from Tasks`)).recordset as IRecordSet<Task>;
+    const globalTree = generateTree(planarTree);
+    res.send({globalTree, planarTree});
+  } catch (ex) {
+    res.status(500);
+    res.send(ex.message);
+
+  }
 })
-export default router;
 
 function generateTree(tree: Task[]) {
   const main = tree.filter(t => t.parentId == null);
   return main.map(m => oneTree(m, tree));
-  // return main;
 }
 function oneTree(task: Task, tree: Task[]) {
   const children = tree.filter(t => t.parentId === task.id);
@@ -41,10 +35,4 @@ function oneTree(task: Task, tree: Task[]) {
   task.children.forEach(c => oneTree(c, tree))
   return task;
 }
-// function oneTree1(tasks: Task[], tree: Task[]) {
-//   // tasks.forEach()
-//   const children = tree.filter(t => t.parentId === task.id);
-//   task.children = children;
-//   task.children.forEach(c => oneTree(c, tree))
-//   return task;
-// }
+export default router;
